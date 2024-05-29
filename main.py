@@ -71,7 +71,7 @@ async def root(payload: Payload     ):
         # Decode the JWT token
         decoded_token = decode_jwt(token)    
     response_data = {
-        "message": "hello "+ decoded_token['name'],
+        "message": hello + decoded_token['name'],
         "sensitive_data": sensitive_data,
         "non_sensitive_data": non_sensitive_data,
         "decoded_token": decoded_token
