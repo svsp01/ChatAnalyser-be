@@ -3,10 +3,11 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 import pandas as pd
 from typing import Dict, Any
-from PyPDF2 import PdfReader
+import fitz  # PyMuPDF
 import os
 import requests
-import fitz
+import json
+import logging
 
 app = FastAPI()
 
