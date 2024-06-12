@@ -1,112 +1,93 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict, Any
-import jwt
-from dotenv import load_dotenv
-import os
 from pymongo import MongoClient
-
-load_dotenv()
-
-MONGODB_URI = os.getenv("MONGODB_URI")
+import pandas as pd
+from typing import Dict, Any
+from PyPDF2 import PdfReader
+import os
+import requests
 
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-class KeyValue(BaseModel):
-    key: str
-    value: Any
+class Query(BaseModel):
+    question: str
 
-class Payload(BaseModel):
-    localStorageData: List[KeyValue]
-    sessionStorageData: List[KeyValue]
-    cookies: List[KeyValue]
-    currentUrl: str
-    geolocationData: Any
-    deviceData: Any
+data_store: Dict[str, Any] = {}
+mongo_client = MongoClient("mongodb://localhost:27017/")  
+db = mongo_client["AnalyZer"]  
+collection = db["Analyser"] 
 
-
-
-SENSITIVE_KEYS = {
-    "password",
-    "creditCard",
-    "ssn",
-    "token",
-    "authToken",
-    "refreshToken",
-    "userData",
-    "personalInfo",
-    "email",
-    "phoneNumber"
-}
-
-def decode_jwt(token: str) -> Dict[str, Any]:
+def process_excel(file_path: str) -> Dict[str, Any]:
     try:
-        decoded = jwt.decode(token, options={"verify_signature": False}) 
-        return decoded
-    except jwt.DecodeError:
-        return {}
+        df = pd.read_excel(file_path, engine='openpyxl')
+    except Exception:
+        try:
+            df = pd.read_csv(file_path)
+        except Exception as e:
+            raise Exception(f"Failed to read file: {e}")
+    
+    data = df.to_dict(orient='records')
+    return data
 
-client = MongoClient(MONGODB_URI)
-db = client["collectionData"]
-response_data_collection = db["collectionLocation"]
+def process_pdf(file_path: str) -> str:
+    reader = PdfReader(file_path)
+    text = ''
+    for page in reader.pages:
+        text += page.extract_text()
+    return text
 
-@app.post("/")
-async def root(payload: Payload):
-    sensitive_data = []
-    non_sensitive_data = []
-    location = payload.geolocationData
-    # print(payload.deviceData, ">")
-    deviceData ={}
-    deviceData= payload.deviceData
-    
-    for item in payload.localStorageData + payload.sessionStorageData + payload.cookies:
-        if item.key in SENSITIVE_KEYS:
-            sensitive_data.append(dict(item))
-        else:
-            non_sensitive_data.append(dict(item))
+@app.post("/upload_file/{org_id}")
+async def upload_file(org_id: str, file: UploadFile = File(...)):
+    if not file.filename.endswith(('.xlsx', '.xls', '.pdf')):
+        raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    token = None
-    for item in sensitive_data:
-        if item["key"] == "token":  
-            token = item["value"]    
-            break
+    file_path = f"temp_files/{file.filename}"
+    os.makedirs("temp_files", exist_ok=True)
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    if file.filename.endswith(('.xlsx', '.xls')):
+        data = process_excel(file_path)
+    elif file.filename.endswith('.pdf'):
+        data = process_pdf(file_path)
     
-    decoded_token = {}
-    if token:
-        decoded_token = decode_jwt(token)    
-    
-    google_maps_url = None
-    if location:
-        google_maps_url = f"https://www.google.com/maps/search/?api=1&query={location['latitude']},{location['longitude']}"   
-    
-    response_data = {
-        "message": "hello" + decoded_token.get('name', ''),
-        "sensitive_data": sensitive_data,
-        "non_sensitive_data": non_sensitive_data,
-        "decoded_token": decoded_token,
-        "geolocationData": google_maps_url,
-        "deviceData": payload.deviceData
+    data_to_insert = {"org_id": org_id, "data": data}
+    collection.insert_one(data_to_insert)
+
+    os.remove(file_path)
+
+    return {
+        "message": "File successfully processed and data stored",
+        "Data": data
     }
+
+@app.post("/query/{org_id}")
+async def query(org_id: str, query: Query):
+    org_data = collection.find_one({"org_id": org_id})
+    if not org_data:
+        raise HTTPException(status_code=404, detail="Organization not found")
     
-    # Check if data already exists
-    existing_data = response_data_collection.find_one({})  # Empty filter to find any existing data
-    
-    if existing_data:
-        # If data exists, compare and update if necessary
-        if existing_data != response_data:  
-            response_data_collection.update_one({}, {"$set": response_data})  # Update existing data
-            return {"status": "Data updated in MongoDB collection"}
-        else:
-            return {"status": "Data is identical, ignoring"}
-    else:
-        # If no data exists, insert new data
-        response_data_collection.insert_one(response_data)
-        return {"status": "Data stored in MongoDB collection"}
+    # input_text = f"Organization Data: {org_data}. Question: {query.question}"
+
+    API_URL = "https://api-inference.huggingface.co/models/deepset/roberta-base-squad2"
+    headers = {"Authorization": "Bearer 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"}
+
+    def query_hf(payload):
+        response = requests.post(API_URL, headers=headers, json=payload)
+        return response.json()
+
+    payload = {
+        "inputs": {
+            "question": query.question,
+            "context": org_data
+        }
+    }
+
+    response = query_hf(payload)
+    generated_answer = response.get('answer', 'No answer found')
+
+    return {"answer": generated_answer}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
