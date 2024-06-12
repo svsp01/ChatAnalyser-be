@@ -6,8 +6,7 @@ from typing import Dict, Any
 import pdfplumber
 import os
 import requests
-import json
-import logging
+
 
 app = FastAPI()
 
