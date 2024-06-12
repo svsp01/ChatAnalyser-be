@@ -6,6 +6,7 @@ from typing import Dict, Any
 from PyPDF2 import PdfReader
 import os
 import requests
+import fitz
 
 app = FastAPI()
 
@@ -13,7 +14,7 @@ class Query(BaseModel):
     question: str
 
 data_store: Dict[str, Any] = {}
-mongo_client = MongoClient("mongodb://localhost:27017/")  
+mongo_client = MongoClient(os.environ.get("DBURL"))  
 db = mongo_client["AnalyZer"]  
 collection = db["Analyser"] 
 
@@ -30,11 +31,12 @@ def process_excel(file_path: str) -> Dict[str, Any]:
     return data
 
 def process_pdf(file_path: str) -> str:
-    reader = PdfReader(file_path)
+    doc = fitz.open(file_path)
     text = ''
-    for page in reader.pages:
-        text += page.extract_text()
+    for page in doc:
+        text += page.get_text()
     return text
+
 
 @app.post("/upload_file/{org_id}")
 async def upload_file(org_id: str, file: UploadFile = File(...)):
@@ -69,8 +71,9 @@ async def query(org_id: str, query: Query):
     
     # input_text = f"Organization Data: {org_data}. Question: {query.question}"
 
-    API_URL = "https://api-inference.huggingface.co/models/deepset/roberta-base-squad2"
-    headers = {"Authorization": "Bearer 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"}
+    API_URL = os.environ.get("HFURL")
+    Token = os.environ.get("TOKENHF")
+    headers = {"Authorization": f"Bearer {Token}"}
 
     def query_hf(payload):
         response = requests.post(API_URL, headers=headers, json=payload)
