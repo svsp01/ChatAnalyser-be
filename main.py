@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 import pandas as pd
 from typing import Dict, Any
-import fitz  # PyMuPDF
+import pdfplumber
 import os
 import requests
 import json
@@ -32,10 +32,10 @@ def process_excel(file_path: str) -> Dict[str, Any]:
     return data
 
 def process_pdf(file_path: str) -> str:
-    doc = fitz.open(file_path)
-    text = ''
-    for page in doc:
-        text += page.get_text()
+    text = ""
+    with pdfplumber.open(file_path) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text()
     return text
 
 
