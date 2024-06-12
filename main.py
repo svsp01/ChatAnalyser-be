@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 import pandas as pd
 from typing import Dict, Any
-import pdfplumber
+import PyPDF2
 import os
 import requests
 
@@ -32,9 +32,12 @@ def process_excel(file_path: str) -> Dict[str, Any]:
 
 def process_pdf(file_path: str) -> str:
     text = ""
-    with pdfplumber.open(file_path) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text()
+    with open(file_path, "rb") as file:
+        pdf_reader = PyPDF2.PdfFileReader(file)
+        num_pages = pdf_reader.numPages
+        for page_number in range(num_pages):
+            page = pdf_reader.getPage(page_number)
+            text += page.extractText()
     return text
 
 
