@@ -3,9 +3,12 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 import pandas as pd
 from typing import Dict, Any
-import PdfReader
+import PyPDF2
 import os
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()  
 
 
 app = FastAPI()
@@ -32,12 +35,11 @@ def process_excel(file_path: str) -> Dict[str, Any]:
 
 def process_pdf(file_path: str) -> str:
     text = ""
-    with open(file_path, "rb") as file:
-        pdf_reader = PdfReader.PdfFileReader(file)
-        num_pages = pdf_reader.numPages
-        for page_number in range(num_pages):
-            page = pdf_reader.getPage(page_number)
-            text += page.extractText()
+    with open(file_path, 'rb') as pdf_file:
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        for page_num in range(len(pdf_reader.pages)):
+            page = pdf_reader.pages[page_num]
+            text += page.extract_text()
     return text
 
 
@@ -72,11 +74,14 @@ async def query(org_id: str, query: Query):
     if not org_data:
         raise HTTPException(status_code=404, detail="Organization not found")
     
-    # input_text = f"Organization Data: {org_data}. Question: {query.question}"
 
     API_URL = os.environ.get("HFURL")
     Token = os.environ.get("TOKENHF")
     headers = {"Authorization": f"Bearer {Token}"}
+    print(API_URL, ">>>>>>")
+    print(Token, ">>>>>>")
+    print(headers, ">>>>>>")
+
 
     def query_hf(payload):
         response = requests.post(API_URL, headers=headers, json=payload)
@@ -85,7 +90,7 @@ async def query(org_id: str, query: Query):
     payload = {
         "inputs": {
             "question": query.question,
-            "context": org_data
+            "context": str(org_data)
         }
     }
 
