@@ -1,5 +1,5 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile, File, HTTPException # type: ignore
+from pydantic import BaseModel # type: ignore
 from pymongo import MongoClient
 import pandas as pd
 from typing import Dict, Any
@@ -68,13 +68,7 @@ async def upload_file(org_id: str, file: UploadFile = File(...)):
         "Data": data
     }
 
-@app.post("/getAllOrganization")
-async def getAllOrganization():
-    
-    all_data = list(collection.find())
-    for data in all_data:
-        data["_id"] = str(data["_id"])  
-    return all_data
+
      
 
 @app.post("/query/{org_id}")
@@ -87,9 +81,7 @@ async def query(org_id: str, query: Query):
     API_URL = os.environ.get("HFURL")
     Token = os.environ.get("TOKENHF")
     headers = {"Authorization": f"Bearer {Token}"}
-    print(API_URL, ">>>>>>")
-    print(Token, ">>>>>>")
-    print(headers, ">>>>>>")
+    
 
 
     def query_hf(payload):
@@ -108,6 +100,15 @@ async def query(org_id: str, query: Query):
 
     return {"answer": generated_answer}
 
+@app.get("/getAllOrganization")
+async def getAllOrganization():
+    all_data = list(collection.find({}))
+    print(all_data)
+    
+    for data in all_data:
+        data["_id"] = str(data["_id"])  
+    return all_data
+
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn # type: ignore
     uvicorn.run(app, host="0.0.0.0", port=8000)
