@@ -68,6 +68,15 @@ async def upload_file(org_id: str, file: UploadFile = File(...)):
         "Data": data
     }
 
+@app.post("/getAllOrganization")
+async def getAllOrganization():
+    
+    all_data = list(collection.find())
+    for data in all_data:
+        data["_id"] = str(data["_id"])  
+    return all_data
+     
+
 @app.post("/query/{org_id}")
 async def query(org_id: str, query: Query):
     org_data = collection.find_one({"org_id": org_id})
